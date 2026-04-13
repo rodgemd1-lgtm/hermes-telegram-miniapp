@@ -8,6 +8,7 @@ A sleek, terminal-style web interface for your Hermes agent that runs inside Tel
 - **Context bar** — live model name, token usage bar, session duration (like the Hermes CLI)
 - **Status tab** — CPU/mem/disk gauges, process list, quick actions
 - **Cron tab** — create, edit, delete, pause, and trigger scheduled jobs
+- **Agent spawning** — spawn independent Hermes instances in the background, monitor live output, send follow-up messages (interactive or one-shot mode, max 5 concurrent)
 - **File attachments** — attach images, PDFs, CSVs; agent uses vision_analyze or OCR automatically
 - **Local vision & OCR** — optional local LLM servers for private image analysis and document OCR
 - **Rock-solid auth** — Ed25519 signature validation via Telegram's public key
@@ -185,6 +186,11 @@ If initData isn't available (e.g. you're testing in a regular browser), the serv
 | `POST /api/command` | Yes | Execute a slash command |
 | `GET /api/commands` | Yes | List available commands |
 | `POST /v1/chat/completions` | Yes | Streaming chat (SSE), supports multimodal content |
+| `GET /api/agents` | Yes | List spawned agents with live status |
+| `POST /api/agents` | Yes | Spawn a new agent (interactive or one-shot) |
+| `GET /api/agents/{name}` | Yes | Agent details + tmux output |
+| `DELETE /api/agents/{name}` | Yes | Kill agent and remove from registry |
+| `POST /api/agents/{name}/message` | Yes | Send message to agent's tmux session |
 
 ## Troubleshooting
 
@@ -237,6 +243,11 @@ Hermes Gateway (port 8642)
     ├─ Serves mini app static files from ~/.hermes/miniapp/
     ├─ Multimodal chat (images, PDFs, text files)
     ├─ Attachment handling: saves to /tmp, injects tool hints
+    ├─ Agent spawning: tmux-backed independent Hermes instances
+    │   ├─ Interactive mode (full session, send follow-ups)
+    │   ├─ One-shot mode (hermes chat -q, auto-detects completion)
+    │   ├─ Worktree mode (-w) for parallel code work without conflicts
+    │   └─ Max 5 concurrent, auto-cleanup after 1 hour
     └─ SSE streaming for chat responses
 
 Optional Local Models (CPU)

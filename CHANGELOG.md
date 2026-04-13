@@ -5,6 +5,38 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [1.0.4] — 2026-04-13
+
+### Added
+
+**Agent Spawning** — spawn, monitor, and interact with independent Hermes agent instances from inside Telegram. Each agent runs in its own tmux session with full tool access, independent of the main gateway session.
+
+- **Agents tab** — new 4th tab (⚡) alongside Terminal, Status, and Cron
+  - Agent list with live status dots (spawning/running/idle/dead), model, mode, uptime
+  - Tap a card to drill into live terminal output (monospace, auto-refreshing every 3s)
+  - Send follow-up messages to running agents via the output view input bar
+  - Inline kill confirmation (Cancel/Kill bar, matching cron delete pattern)
+  - FAB + button to open spawn modal
+- **Spawn modal** — bottom sheet with: name (optional), task prompt, mode chips (interactive/one-shot), worktree toggle
+- **`/spawn <prompt>`** — slash command in Terminal tab for quick background spawning with autocomplete
+- **Quick Actions** — Agents button in Status tab
+
+### Backend (api_server.py — requires feat/telegram-miniapp-ed25519-auth branch)
+
+- `GET /api/agents` — list spawned agents with live tmux status checks
+- `POST /api/agents` — spawn new agent (interactive or one-shot mode, optional model/worktree)
+- `GET /api/agents/{name}` — agent details + last 120 lines of tmux output
+- `DELETE /api/agents/{name}` — kill agent and remove from registry
+- `POST /api/agents/{name}/message` — send a message to a running agent's tmux session
+- Concurrency limit: max 5 concurrent agents (429 on excess)
+- Auto-cleanup: dead agents older than 1 hour purged every 5 minutes
+- Shell-injection safe: `tmux send-keys -l` for literal text, `shlex.quote` for one-shot mode
+
+### Changed
+
+- Tab bar now has 4 tabs: Terminal, Status, Cron, Agents
+- Status Quick Actions grid includes Agents shortcut
+
 ## [1.0.3] — 2026-04-13
 
 ### Security
