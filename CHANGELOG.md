@@ -5,6 +5,62 @@ All notable changes to this project will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [2.0.1] — 2026-04-14
+
+### Fixed
+
+**Critical HMAC-SHA256 argument swap** — the `secret_key` computation in `_validate_hmac_sha256()` had swapped arguments to `hmac.new()`:
+```python
+# Before (WRONG — key=bot_token):
+secret_key = hmac.new(bot_token.encode(), "WebAppData".encode(), sha256).digest()
+# After (CORRECT — key="WebAppData"):
+secret_key = hmac.new("WebAppData".encode(), bot_token.encode(), sha256).digest()
+```
+
+This caused ALL Telegram initData HMAC validation to fail since v2.0.0. Only true-localhost requests worked (they skip auth). Through-tunnel requests always returned 401 Unauthorized.
+
+Root cause: Telegram docs use `HMAC_SHA256(message, key)` notation (non-standard), while Python's `hmac.new(key, msg)` uses the opposite order. Easy to misread.
+
+### Added
+
+- **Deploy script** (`deploy.sh`) — safe deployment from standalone repo to hermes-agent installation
+  - Pre-flight checks: verifies frontend contains Telegram auth, verifies HMAC formula is correct
+  - Timestamped backups before overwriting
+  - Syntax check after deploy with auto-rollback on failure
+- **Git protection** — `git update-index --assume-unchanged` on deployed `web_server.py` prevents upstream `git pull` from overwriting custom files
+- **Auth debug skill** — `telegram-miniapp-v2-auth-debug` skill with HMAC pitfall documentation, diagnostic endpoints, and test script
+
+### Changed
+
+- Standalone project directory at `~/projects/telegram-miniapp-v2/` is now the source of truth
+- Removed `fork` remote from hermes-agent repo (was pointing to miniapp repo — caused the original overwrite)
+- Deleted stale `feat/telegram-miniapp-ed25519-auth` branch and related stash from hermes-agent repo
+
+## [2.0.0] — 2026-04-14
+
+### Added
+
+- **Full rewrite as React SPA** — Vite + React 19 + TypeScript + Tailwind CSS + shadcn/ui
+- **10 pages**: Chat, Status, Agents, Sessions, Analytics, Logs, Cron, Skills, Config, Keys
+- **Dual auth**: HMAC-SHA256 (primary) + Ed25519 (fallback) initData validation
+- **Mobile-first design** with responsive breakpoints for all pages
+- **Agent spawning**: spawn/kill/message independent Hermes instances in tmux (max 5 concurrent)
+- **Streaming chat** with file attachments (images, PDFs, CSVs)
+- **Local vision & OCR** integration (LFM2-VL-450M port 8080, GLM-OCR port 8081)
+- **Security hardening**: 11 vulnerabilities fixed (XSS, CSP, rate limiting, SRI, CSRF)
+- **Config editor** with form mode (by category) and raw YAML mode
+- **API key management** for LLM providers, tools, and messaging platforms
+- **Session search** with FTS5 full-text search
+- **OAuth provider management** (PKCE and device code flows)
+
+### Changed
+
+- Frontend: single HTML file (~97KB) → built React SPA (~339KB JS + ~48KB CSS)
+- Backend: `web_server.py` grew from ~1840 lines to ~2540 lines with auth, agents, chat, health endpoints
+- Auth: Ed25519-only → dual HMAC-SHA256 + Ed25519 validation
+- CORS: restricted to specific origins (localhost, Telegram webview, tunnel domain)
+- Build: `npm run build` outputs to `hermes_cli/web_dist/`
+
 ## [1.0.4] — 2026-04-13
 
 ### Added
