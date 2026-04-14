@@ -10,6 +10,7 @@ Usage:
 """
 
 import asyncio
+import hmac
 import json
 import logging
 import os
@@ -1851,65 +1852,136 @@ async def get_usage_analytics(days: int = 30):
 
 
 # ---------------------------------------------------------------------------
-# Telegram Ed25519 auth middleware
+# Telegram initData validation — HMAC-SHA256 (primary) + Ed25519 (fallback)
 # ---------------------------------------------------------------------------
 
+def _parse_init_data(init_data: str) -> tuple:
+    """Parse initData query string into (raw_pairs, hash_value, signature_b64).
+    
+    raw_pairs excludes 'hash' and 'signature' fields.
+    Values are URL-decoded once via urllib.parse.unquote.
+    """
+    from urllib.parse import unquote
+    raw_pairs: Dict[str, str] = {}
+    hash_value: Optional[str] = None
+    signature_b64: Optional[str] = None
+    for part in init_data.split("&"):
+        if "=" in part:
+            key, val = part.split("=", 1)
+            key = key.strip()
+            if key == "hash":
+                hash_value = val
+            elif key == "signature":
+                signature_b64 = val
+            else:
+                raw_pairs[key] = unquote(val)
+    return raw_pairs, hash_value, signature_b64
+
+
+def _check_owner_and_expiry(raw_pairs: Dict[str, str]) -> Optional[Dict[str, Any]]:
+    """Validate auth_date freshness and owner identity. Returns user dict or None."""
+    auth_date_str = raw_pairs.get("auth_date", "0")
+    auth_date = int(auth_date_str) if auth_date_str else 0
+    if time.time() - auth_date > 86400:
+        _log.warning("Telegram initData expired: auth_date=%d age=%ds", auth_date, int(time.time() - auth_date))
+        return None
+
+    user_json = raw_pairs.get("user", "{}")
+    user = json.loads(user_json)
+    user_id = str(user.get("id", ""))
+
+    if _TG_OWNER_ID and user_id != _TG_OWNER_ID:
+        _log.warning("Telegram owner check failed: user_id=%s expected=%s", user_id, _TG_OWNER_ID)
+        return None
+
+    return user
+
+
+def _validate_hmac_sha256(raw_pairs: Dict[str, str], hash_value: Optional[str]) -> bool:
+    """Validate initData via HMAC-SHA256 (Telegram's primary method).
+    
+    Per https://core.telegram.org/bots/webapps#validating-data-received-via-the-mini-app:
+      secret_key = HMAC_SHA256(bot_token, "WebAppData")
+      data_check_string = sorted key=value pairs joined by \\n  (NO prefix)
+      verify: hex(HMAC_SHA256(data_check_string, secret_key)) == hash
+    """
+    if not hash_value or not _TG_BOT_TOKEN:
+        return False
+    
+    check_items = [f"{k}={raw_pairs[k]}" for k in sorted(raw_pairs.keys())]
+    check_string = "\n".join(check_items)
+    
+    import hashlib
+    secret_key = hmac.new("WebAppData".encode(), _TG_BOT_TOKEN.encode(), hashlib.sha256).digest()
+    computed = hmac.new(secret_key, check_string.encode(), hashlib.sha256).hexdigest()
+    
+    if hmac.compare_digest(computed, hash_value):
+        return True
+    _log.debug("HMAC-SHA256 mismatch: computed=%s... hash=%s...", computed[:16], hash_value[:16])
+    return False
+
+
+def _validate_ed25519(raw_pairs: Dict[str, str], signature_b64: Optional[str]) -> bool:
+    """Validate initData via Ed25519 signature (Telegram's third-party method).
+    
+    Per https://core.telegram.org/bots/webapps#validating-data-for-third-party-use:
+      data_check_string = "bot_id:WebAppData\\n" + sorted key=value pairs joined by \\n
+      signature = base64url-encoded Ed25519 signature
+      public_key (prod) = e7bf03a2fa4602af4580703d88dda5bb59f32ed8b02a56c187fe7d34caed242d
+    """
+    if not signature_b64 or not _TG_BOT_TOKEN:
+        return False
+    
+    import base64
+    bot_id = _TG_BOT_TOKEN.split(":")[0] if ":" in _TG_BOT_TOKEN else ""
+    check_items = [f"{k}={raw_pairs[k]}" for k in sorted(raw_pairs.keys())]
+    prefix = f"{bot_id}:WebAppData"
+    check_string = prefix + "\n" + "\n".join(check_items)
+
+    from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
+    # Telegram Ed25519 production public key (64 hex chars = 32 bytes).
+    # MUST match https://core.telegram.org/bots/webapps exactly.
+    TG_ED25519_PUBKEY = "e7bf03a2fa4602af4580703d88dda5bb59f32ed8b02a56c187fe7d34caed242d"
+    assert len(TG_ED25519_PUBKEY) == 64 and all(c in "0123456789abcdef" for c in TG_ED25519_PUBKEY), \
+        f"TG_ED25519_PUBKEY corrupt: expected 64 hex chars, got {len(TG_ED25519_PUBKEY)}: {TG_ED25519_PUBKEY}"
+    pub_key = Ed25519PublicKey.from_public_bytes(bytes.fromhex(TG_ED25519_PUBKEY))
+    sig_padded = signature_b64 + "=" * (-len(signature_b64) % 4)
+    sig_bytes = base64.urlsafe_b64decode(sig_padded)
+    
+    try:
+        pub_key.verify(sig_bytes, check_string.encode())
+        return True
+    except Exception as e:
+        _log.debug("Ed25519 validation failed: %s", e)
+        return False
+
+
 def _validate_telegram_init_data(init_data: str) -> Optional[Dict[str, Any]]:
-    """Validate Telegram WebApp initData via Ed25519 signature.
+    """Validate Telegram WebApp initData via HMAC-SHA256 (primary) then Ed25519 (fallback).
+
+    Tries HMAC-SHA256 first (uses bot token — Telegram's recommended method for the
+    bot's own server). Falls back to Ed25519 if HMAC fails (uses Telegram's public key
+    — designed for third-party validation but works too).
 
     Returns parsed user dict on success, None on failure.
     """
     if not init_data or not _TG_BOT_TOKEN:
         return None
     try:
-        from urllib.parse import unquote
-        import base64
-
-        raw_pairs: Dict[str, str] = {}
-        signature_b64: Optional[str] = None
-        for part in init_data.split("&"):
-            if "=" in part:
-                key, val = part.split("=", 1)
-                key = key.strip()
-                if key == "signature":
-                    signature_b64 = val
-                elif key not in ("hash", "signature"):
-                    raw_pairs[key] = unquote(val)
-
-        if not signature_b64:
-            return None
-
-        bot_id = _TG_BOT_TOKEN.split(":")[0] if ":" in _TG_BOT_TOKEN else ""
-        check_items = [f"{k}={raw_pairs[k]}" for k in sorted(raw_pairs.keys())]
-        check_string = f"{bot_id}:WebAppData\n" + "\n".join(check_items)
-
-        from cryptography.hazmat.primitives.asymmetric.ed25519 import Ed25519PublicKey
-        # Telegram Ed25519 production public key (64 hex chars = 32 bytes).
-        # MUST match https://core.telegram.org/bots/webapps exactly.
-        # Past sessions corrupted this key — DO NOT modify without verifying
-        # against the live Telegram docs.
-        TG_ED25519_PUBKEY = "e7bf03a2fa4602af4580703d88dda5bb59f32ed8b02a56c187fe7d34caed242d"
-        assert len(TG_ED25519_PUBKEY) == 64 and all(c in "0123456789abcdef" for c in TG_ED25519_PUBKEY), \
-            f"TG_ED25519_PUBKEY corrupt: expected 64 hex chars, got {len(TG_ED25519_PUBKEY)}: {TG_ED25519_PUBKEY}"
-        pub_key = Ed25519PublicKey.from_public_bytes(bytes.fromhex(TG_ED25519_PUBKEY))
-        sig_padded = signature_b64 + "=" * (-len(signature_b64) % 4)
-        sig_bytes = base64.urlsafe_b64decode(sig_padded)
-        pub_key.verify(sig_bytes, check_string.encode())
-
-        auth_date_str = raw_pairs.get("auth_date", "0")
-        auth_date = int(auth_date_str) if auth_date_str else 0
-        if time.time() - auth_date > 86400:
-            return None
-
-        user_json = raw_pairs.get("user", "{}")
-        user = json.loads(user_json)
-        user_id = str(user.get("id", ""))
-
-        if _TG_OWNER_ID and user_id != _TG_OWNER_ID:
-            _log.warning("Telegram owner check failed: user_id=%s expected=%s", user_id, _TG_OWNER_ID)
-            return None
-
-        return user
+        raw_pairs, hash_value, signature_b64 = _parse_init_data(init_data)
+        
+        # Try HMAC-SHA256 first (primary, per Telegram docs)
+        if hash_value and _validate_hmac_sha256(raw_pairs, hash_value):
+            _log.debug("Auth: HMAC-SHA256 valid")
+            return _check_owner_and_expiry(raw_pairs)
+        
+        # Fall back to Ed25519 (third-party method)
+        if signature_b64 and _validate_ed25519(raw_pairs, signature_b64):
+            _log.debug("Auth: Ed25519 valid")
+            return _check_owner_and_expiry(raw_pairs)
+        
+        _log.warning("Auth: both HMAC and Ed25519 failed for initData (%d chars)", len(init_data))
+        return None
     except Exception as e:
         _log.warning("Telegram initData validation error: %s", e)
         return None
