@@ -50,10 +50,10 @@ Before you start, you'll need:
 
 ```bash
 # Create the mini app directory
-mkdir -p ~/.hermes/miniapp
+mkdir -p ~/.hermes/hermes-agent/hermes_cli/web_dist
 
 # Copy the mini app
-cp index.html ~/.hermes/miniapp/index.html
+cp index.html ~/.hermes/hermes-agent/hermes_cli/web_dist/index.html
 ```
 
 That's it. One file.
@@ -77,12 +77,12 @@ If you're using systemd to run the gateway, also add these to your service file.
 
 ### Step 5: Expose the gateway to the internet
 
-The mini app needs to be accessible from Telegram's servers. The Hermes gateway runs on port 8642 by default.
+The mini app needs to be accessible from Telegram's servers. The Hermes gateway runs on port 9119 by default.
 
 **Option A: Cloudflare Quick Tunnel (fastest, but URL changes on restart)**
 
 ```bash
-cloudflared tunnel --url http://localhost:8642
+cloudflared tunnel --url http://localhost:9119
 ```
 
 This gives you a URL like `https://random-words.trycloudflare.com`. It works, but the URL changes every time you restart. Fine for testing.
@@ -107,14 +107,14 @@ See `tunnel/cloudflared-config.yml` for a sample config. Save it as `~/.cloudfla
 
 **Option C: Any other reverse proxy**
 
-Just forward HTTPS traffic to `localhost:8642`. You need a valid SSL certificate — Telegram requires HTTPS.
+Just forward HTTPS traffic to `localhost:9119`. You need a valid SSL certificate — Telegram requires HTTPS.
 
 ### Step 6: Set the bot's Mini App URL
 
 1. Go back to [@BotFather](https://t.me/BotFather)
 2. Send `/setmenubutton`
 3. Pick your bot
-4. Send the URL: `https://your-tunnel-url/miniapp/index.html`
+4. Send the URL: `https://your-tunnel-url/index.html`
 
 This adds a "menu" button in the chat that opens the mini app. Users tap it to launch the interface.
 
@@ -237,10 +237,10 @@ Telegram Client
 Cloudflare Tunnel (or any HTTPS reverse proxy)
     │
     ▼
-Hermes Gateway (port 8642)
+Hermes Gateway (port 9119)
     ├─ Ed25519 signature validation (no bot token needed)
     ├─ Owner-only access control
-    ├─ Serves mini app static files from ~/.hermes/miniapp/
+    ├─ Serves mini app static files from ~/.hermes/hermes-agent/hermes_cli/web_dist/
     ├─ Multimodal chat (images, PDFs, text files)
     ├─ Attachment handling: saves to /tmp, injects tool hints
     ├─ Agent spawning: tmux-backed independent Hermes instances
