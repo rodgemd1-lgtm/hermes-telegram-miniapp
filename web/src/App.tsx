@@ -10,6 +10,7 @@ import LogsPage from "@/pages/LogsPage";
 import AnalyticsPage from "@/pages/AnalyticsPage";
 import CronPage from "@/pages/CronPage";
 import SkillsPage from "@/pages/SkillsPage";
+import ApiKeyModal from "@/components/ApiKeyModal";
 
 const NAV_ITEMS = [
   { id: "chat", label: "Chat", icon: Terminal },
@@ -45,7 +46,31 @@ const FULL_HEIGHT_PAGES = new Set(["chat"]);
 export default function App() {
   const [page, setPage] = useState<PageId>("chat");
   const [animKey, setAnimKey] = useState(0);
+  const [needsAuth, setNeedsAuth] = useState(false);
   const initialRef = useRef(true);
+
+  // Check if we need API key auth (not running in Telegram)
+  useEffect(() => {
+    const tg = (window as any).Telegram?.WebApp;
+    if (!tg?.initData) {
+      // Not in Telegram — check if we already have an API key stored
+      const existingKey = sessionStorage.getItem("hermes_api_key") || localStorage.getItem("hermes_api_key");
+      if (!existingKey) {
+        // Try to get session token first — if it fails, show API key modal
+        fetch("/api/auth/session-token", {
+          headers: { "Authorization": "" }  // no auth, test if localhost
+        })
+          .then(r => { if (!r.ok) setNeedsAuth(true); })
+          .catch(() => setNeedsAuth(true));
+      }
+    }
+  }, []);
+
+  const handleAuth = (_key: string) => {
+    setNeedsAuth(false);
+    // Reload to apply the key
+    window.location.reload();
+  };
 
   useEffect(() => {
     if (initialRef.current) {
@@ -62,6 +87,8 @@ export default function App() {
     <div className="flex min-h-screen flex-col bg-background text-foreground">
       <div className="noise-overlay" />
       <div className="warm-glow" />
+
+      <ApiKeyModal onAuth={handleAuth} isOpen={needsAuth} />
 
       {/* Header */}
       <header className="sticky top-0 z-40 border-b border-border bg-background/90 backdrop-blur-sm">

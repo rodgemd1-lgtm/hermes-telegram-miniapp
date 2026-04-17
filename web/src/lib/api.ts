@@ -4,6 +4,13 @@ const BASE = "";
 // Fetched once on first reveal request and cached in memory.
 let _sessionToken: string | null = null;
 
+// API key fallback for non-Telegram access (stored in sessionStorage).
+function _getApiKey(): string | null {
+  try {
+    return sessionStorage.getItem("hermes_api_key") || localStorage.getItem("hermes_api_key");
+  } catch { return null; }
+}
+
 // Telegram Mini App auth — inject initData header for all requests
 // when running inside a Telegram WebApp context.
 function _tgHeaders(): Record<string, string> {
@@ -14,6 +21,11 @@ function _tgHeaders(): Record<string, string> {
       headers["X-Telegram-Init-Data"] = tg.initData;
     }
   } catch {}
+  // Also add API key as Bearer token if available (for non-Telegram access)
+  const apiKey = _getApiKey();
+  if (apiKey) {
+    headers["Authorization"] = `Bearer ${apiKey}`;
+  }
   return headers;
 }
 
