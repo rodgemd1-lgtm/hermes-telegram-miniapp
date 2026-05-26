@@ -1,0 +1,37 @@
+{
+  "capabilities": [
+    "Installable repo CLI entrypoint",
+    "Source-of-truth clone routing",
+    "README and capability discovery",
+    "rig-core capability surface"
+  ],
+  "command": "hermes-telegram-miniapp",
+  "description": "React SPA dashboard for Telegram Mini App v2.0 - 10-page mobile-first UI. Runs locally.",
+  "github": {
+    "clone": "https://github.com/rodgemd1-lgtm/hermes-telegram-miniapp.git",
+    "mirror": "https://github.com/rodgemd1-lgtm/hermes-telegram-miniapp"
+  },
+  "install": {
+    "clone_optional": true,
+    "default_install_dir": "~/.local/bin",
+    "script": "install.sh"
+  },
+  "lane": "rig-core",
+  "lane_label": "RIG/Jake/Hermes/Deviator operating system",
+  "name": "hermes-telegram-miniapp",
+  "primary_language": "TypeScript",
+  "proof": {
+    "generated_at": "2026-05-26T18:42:38Z",
+    "generated_by": "scripts/repositories/apply_repo_cli_contract.py",
+    "standard": "https://github.com/rodgemd1-lgtm/Startup-Intelligence-OS/blob/claude/rig-sovereign-audit-mesh/docs/repositories/repo-cli-standard.md"
+  },
+  "schema": "rig.repo-cli.v1",
+  "service_commands": [],
+  "slug": "hermes-telegram-miniapp",
+  "source_of_truth": {
+    "clone": "ssh://git@nas94f2ae.tail4d96b3.ts.net:2222/rig/hermes-telegram-miniapp.git",
+    "type": "qnap-gitea"
+  },
+  "status": "active-public",
+  "visibility": "public"
+}

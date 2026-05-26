@@ -174,3 +174,49 @@ README applied from the central RIG blueprint.
 - Blueprint source: `https://github.com/rodgemd1-lgtm/Startup-Intelligence-OS/blob/claude/rig-sovereign-audit-mesh/docs/repositories/repo-readme-blueprints/hermes-telegram-miniapp.md`
 - Applied target: `hermes-telegram-miniapp`
 - Source of truth: QNAP Gitea first, GitHub mirror second.
+
+<!-- RIG-CLI:START -->
+## Install The CLI
+
+This repo exposes a standard RIG command so it can be installed, inspected,
+cloned, and routed into future studio/MCP workflows without guessing its
+internal layout.
+
+Install without cloning:
+
+```bash
+curl -fsSL https://github.com/rodgemd1-lgtm/hermes-telegram-miniapp/raw/main/install.sh | bash
+```
+
+Install and clone the source-of-truth repo:
+
+```bash
+curl -fsSL https://github.com/rodgemd1-lgtm/hermes-telegram-miniapp/raw/main/install.sh | RIG_CLI_CLONE=1 bash
+```
+
+Use it:
+
+```bash
+hermes-telegram-miniapp info
+hermes-telegram-miniapp capabilities
+hermes-telegram-miniapp services
+hermes-telegram-miniapp clone
+hermes-telegram-miniapp doctor
+```
+
+Clone manually:
+
+```bash
+git clone ssh://git@nas94f2ae.tail4d96b3.ts.net:2222/rig/hermes-telegram-miniapp.git
+git clone https://github.com/rodgemd1-lgtm/hermes-telegram-miniapp.git
+```
+
+CLI contract:
+
+- Command: `hermes-telegram-miniapp`
+- Manifest: `cli/manifest.json`
+- Installer: `install.sh`
+- Source of truth: QNAP Gitea first, GitHub mirror second
+- Standard: [https://github.com/rodgemd1-lgtm/Startup-Intelligence-OS/blob/claude/rig-sovereign-audit-mesh/docs/repositories/repo-cli-standard.md](https://github.com/rodgemd1-lgtm/Startup-Intelligence-OS/blob/claude/rig-sovereign-audit-mesh/docs/repositories/repo-cli-standard.md)
+
+<!-- RIG-CLI:END -->

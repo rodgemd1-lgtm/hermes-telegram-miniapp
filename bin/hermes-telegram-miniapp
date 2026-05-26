@@ -1,0 +1,122 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+REPO_NAME='hermes-telegram-miniapp'
+REPO_SLUG='hermes-telegram-miniapp'
+REPO_LANE='rig-core'
+REPO_VISIBILITY='public'
+REPO_STATUS='active-public'
+REPO_DESCRIPTION='React SPA dashboard for Telegram Mini App v2.0 - 10-page mobile-first UI. Runs locally.'
+QNAP_CLONE='ssh://git@nas94f2ae.tail4d96b3.ts.net:2222/rig/hermes-telegram-miniapp.git'
+GITHUB_URL='https://github.com/rodgemd1-lgtm/hermes-telegram-miniapp'
+GITHUB_CLONE='https://github.com/rodgemd1-lgtm/hermes-telegram-miniapp.git'
+DEFAULT_BRANCH='main'
+RIG_REPO_HOME="${RIG_REPO_HOME:-$HOME/.rig/repos}"
+LOCAL_REPO="$RIG_REPO_HOME/$REPO_SLUG"
+
+print_info() {
+  cat <<INFO
+$REPO_NAME
+  command: $REPO_SLUG
+  lane: $REPO_LANE
+  status: $REPO_STATUS
+  visibility: $REPO_VISIBILITY
+  source_of_truth: $QNAP_CLONE
+  github: $GITHUB_URL
+  local_path: $LOCAL_REPO
+  description: $REPO_DESCRIPTION
+INFO
+}
+
+print_capabilities() {
+  cat <<CAPS
+Capabilities:
+  - Installable repo CLI entrypoint
+  - Source-of-truth clone routing
+  - README and capability discovery
+  - $REPO_LANE capability surface
+
+Manifest:
+  cli/manifest.json
+CAPS
+}
+
+print_services() {
+  if [ -f "$LOCAL_REPO/cli/manifest.json" ]; then
+    python3 - "$LOCAL_REPO/cli/manifest.json" <<'PY'
+import json, sys
+manifest = json.load(open(sys.argv[1]))
+commands = manifest.get("service_commands") or []
+if not commands:
+    print("No service commands declared yet.")
+for item in commands:
+    print(f"{item.get('name')}: {item.get('command')}")
+PY
+  else
+    cat <<SERVICES
+Service commands are declared in cli/manifest.json after clone.
+Run:
+  $REPO_SLUG clone
+  $REPO_SLUG services
+SERVICES
+  fi
+}
+
+clone_repo() {
+  mkdir -p "$RIG_REPO_HOME"
+  if [ -d "$LOCAL_REPO/.git" ]; then
+    git -C "$LOCAL_REPO" pull --ff-only || true
+    printf '%s\n' "$LOCAL_REPO"
+    return 0
+  fi
+  if git ls-remote "$QNAP_CLONE" "refs/heads/$DEFAULT_BRANCH" >/dev/null 2>&1; then
+    git clone "$QNAP_CLONE" "$LOCAL_REPO"
+  else
+    git clone "$GITHUB_CLONE" "$LOCAL_REPO"
+  fi
+  printf '%s\n' "$LOCAL_REPO"
+}
+
+open_target() {
+  if [ -d "$LOCAL_REPO" ]; then
+    open "$LOCAL_REPO" 2>/dev/null || printf '%s\n' "$LOCAL_REPO"
+  else
+    open "$GITHUB_URL" 2>/dev/null || printf '%s\n' "$GITHUB_URL"
+  fi
+}
+
+doctor() {
+  command -v git >/dev/null && echo "git: ok" || echo "git: missing"
+  command -v python3 >/dev/null && echo "python3: ok" || echo "python3: missing"
+  [ -d "$LOCAL_REPO/.git" ] && echo "local_clone: $LOCAL_REPO" || echo "local_clone: not cloned"
+  git ls-remote "$QNAP_CLONE" "refs/heads/$DEFAULT_BRANCH" >/dev/null 2>&1 && echo "qnap: reachable" || echo "qnap: unavailable"
+  git ls-remote "$GITHUB_CLONE" "refs/heads/$DEFAULT_BRANCH" >/dev/null 2>&1 && echo "github: reachable" || echo "github: unavailable"
+}
+
+usage() {
+  cat <<USAGE
+Usage: $REPO_SLUG <command>
+
+Commands:
+  info          Show repo identity and source-of-truth routing.
+  capabilities  Show the capability contract.
+  services      Show declared run/test/build commands after clone.
+  clone         Clone or update the source repo under ~/.rig/repos.
+  open          Open the local clone when present, otherwise GitHub.
+  docs          Open the GitHub README.
+  doctor        Check dependencies and remote reachability.
+  help          Show this help.
+USAGE
+}
+
+case "${1:-help}" in
+  info) print_info ;;
+  capabilities) print_capabilities ;;
+  services) print_services ;;
+  clone) clone_repo ;;
+  open) open_target ;;
+  docs) open "$GITHUB_URL#readme" 2>/dev/null || printf '%s#readme\n' "$GITHUB_URL" ;;
+  doctor) doctor ;;
+  help|-h|--help) usage ;;
+  *) echo "Unknown command: $1" >&2; usage; exit 2 ;;
+esac
